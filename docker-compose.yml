@@ -1,0 +1,22 @@
+# v2: static site (nginx) + Python API (prices, structure, backtest, plan).
+# Port: WEB_PORT (default 8080). Several instances: docker compose -p <name> with another WEB_PORT.
+services:
+  web:
+    build: .
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  api:
+    build: ./api
+    environment:
+      REFRESH_SECONDS: ${REFRESH_SECONDS:-60}
+      PRICE_SOURCE: ${PRICE_SOURCE:-dukascopy}      # dukascopy | mt5
+      HISTORY_START: ${HISTORY_START:-2010-01-01}
+      INGEST_TOKEN: ${INGEST_TOKEN:-}               # optional shared secret for bridge/mt5_bridge.py
+      DATA_DIR: /data
+    volumes:
+      - ./_data:/data                 # prices + state, visible in the project folder
+    restart: unless-stopped

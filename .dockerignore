@@ -1,0 +1,9 @@
+.venv
+api
+tests
+bridge
+scripts
+_data
+.pytest_cache
+**/__pycache__
+*.md

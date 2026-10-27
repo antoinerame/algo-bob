@@ -1,0 +1,15 @@
+# local environment and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# price data: downloaded automatically by the api container on first start
+_data/
+
+# research notes built from Bob's private Discord (kept local)
+verif/
+
+# patch leftovers
+*.orig
+*.rej
