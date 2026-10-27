@@ -828,8 +828,9 @@ function drawLines() {
     if (!act.length) {
       const dir = pl.trend ? pl.trend.dir : 0;
       pline(L.U, css('--up'), dir > 0 ? 'Objectif (high)' : 'Objectif (low)', 2);
-      pline(L.Z, css('--accent'), 'Haut de zone', 2, !S.show.struct);
-      pline(L.zlo, css('--down'), 'Bas de zone', 2, !S.show.struct);
+      // Z = zone edge on the entry side, zlo = invalidation side: top/bottom depends on the trend direction
+      pline(L.Z, css('--accent'), dir < 0 ? 'Bas de zone' : 'Haut de zone', 2, !S.show.struct);
+      pline(L.zlo, css('--down'), dir < 0 ? 'Haut de zone (SL)' : 'Bas de zone (SL)', 2, !S.show.struct);
     }
     if (L.prot != null) pline(L.prot, css('--warn'), 'Protégé', 3, !S.show.struct);
   }
