@@ -509,11 +509,9 @@ const candles = chart.addCandlestickSeries({ borderVisible: false, priceLineVisi
 } });
 const zig = chart.addLineSeries({ lineWidth: 2, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
 let lines = [];
-/* zigzag segments are coloured by the trend in force (bull green, bear red, none grey): GET /api/chart `trend` is aligned with `points` */
-function paintZig() {
-  const dn = css('--down'), c = { '1': css('--up'), '-1': dn, '0': hexA(dn, 0.5) };     // green while bullish, red otherwise (fainter without trend)
-  zig.setData(S.show.struct ? (S.zz || []).map((z) => ({ time: z.time, value: z.value, color: c[z.tr] || c['0'] })) : []);
-}
+/* The zigzag is drawn by the overlay primitive (OV.zigzag), not by a line series: a line series holds one value per
+   candle, and a candle often carries two structure points (bullish: low then high; bearish: high then low). */
+function paintZig() { zig.setData([]); if (OV.req) OV.req(); }
 
 function applyTheme() {
   const t = css('--text'), g = css('--grid'), b = css('--border'), up = css('--up'), dn = css('--down');
@@ -597,6 +595,7 @@ const OV = {
       ctx.font = '600 10px ' + C.font; ctx.fillStyle = hexA(c, 0.95); ctx.textBaseline = 'alphabetic';
       ctx.fillText(w < 520 && z.ipa ? 'IPA' : z.label, x0 + 6, yb - ya > 16 ? ya + 12 : ya - 4);
     }
+    if (top && S.show.struct) this.zigzag(ctx, X, Y, lo, hi, C, bs);
     if (top) {
       // --- BOS: dashed line from the broken point to the candle that broke it
       ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
@@ -624,6 +623,21 @@ const OV = {
     for (const it of m.pos) { if (it.id === hk) hov = it; else this.position(ctx, it, layer, w, bs, X, Y, lo, hi, C, m.dec, false); }
     if (hov) this.position(ctx, hov, layer, w, bs, X, Y, lo, hi, C, m.dec, true);
     ctx.restore();
+  },
+  zigzag(ctx, X, Y, lo, hi, C, bs) {
+    // each leg takes the colour of the trend known once its end point is placed: the leg that makes the trend
+    // bullish is already green; green while bullish, red otherwise (fainter without a trend)
+    const Z = S.zz || [], col = { '1': C.up, '-1': C.dn, '0': hexA(C.dn, 0.45) };
+    ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (let i = 1; i < Z.length; i++) {
+      const a = Z[i - 1], b = Z[i], ia = tIdx(a.time) + a.off, ib = tIdx(b.time) + b.off;
+      if (ib < lo || ia > hi) continue;
+      // logicalToCoordinate only handles whole bar indexes: place the sub-candle offset in pixels
+      const XF = (i) => { const r = Math.round(i), x = X(r); return x == null ? null : x + (i - r) * bs; };
+      const xa = XF(ia), xb = XF(ib), ya = Y(a.value), yb = Y(b.value); if (xa == null || xb == null || ya == null || yb == null) continue;
+      ctx.strokeStyle = col[b.tr] || col['0']; ctx.beginPath(); ctx.moveTo(xa, ya); ctx.lineTo(xb, yb); ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
   },
   position(ctx, it, layer, w, bs, X, Y, lo, hi, C, dec, hovered) {
     if ((it.i1 != null && it.i1 < lo) || it.i0 > hi + 40) return;
@@ -885,8 +899,13 @@ async function loadChart(o = {}) {
   candles.applyOptions({ priceFormat: pf }); zig.applyOptions({ priceFormat: pf });
   S.times = D.candles.map((c) => c[0]);
   candles.setData(D.candles.map((c) => ({ time: c[0], open: c[1], high: c[2], low: c[3], close: c[4] })));
-  const zz = [], seen = new Set(), f0 = D.candles[0][0], TR = D.trend || [];
-  for (const [p, tr] of D.points.map((p, i) => [p, TR[i] || 0]).sort((a, b) => a[0][0] - b[0][0])) { if (p[0] < f0) continue; const t = snap(p[0]); if (seen.has(t)) continue; seen.add(t); zz.push({ time: t, value: p[2], tr }); }
+  const zz = [], f0 = D.candles[0][0], TR = D.trend || [];
+  // stable sort: two points on the same candle keep the engine's order (the candle colour's order)
+  for (const [p, tr] of D.points.map((p, i) => [p, TR[i] || 0]).sort((a, b) => a[0][0] - b[0][0])) { if (p[0] < f0) continue; zz.push({ time: snap(p[0]), value: p[2], k: p[1], tr }); }
+  for (let i = 0; i < zz.length; i++) {      // sub-candle position: 1st of two points on a candle a bit left, 2nd a bit right
+    const same = (j) => j >= 0 && j < zz.length && zz[j].time === zz[i].time;
+    zz[i].off = same(i + 1) ? -0.22 : same(i - 1) ? 0.22 : 0;
+  }
   S.zz = zz; paintZig();
   if (!S.win) S.tailFirst = f0;
   $('lgWin').hidden = !S.win; if (S.win) $('lgWin').textContent = `Période passée : ${fmtDay.format(new Date(f0 * 1000))} → ${fmtDay.format(new Date(lastT0(D) * 1000))} · Échap pour revenir au présent`;
